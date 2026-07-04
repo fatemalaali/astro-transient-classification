@@ -126,8 +126,20 @@ The four tuned models are evaluated once on the future test fold; the metric tab
 (including weighted log loss) is written to
 `figures/lc/plasticc/6band_native_test_metrics.csv`.
 
-<!-- RESULTS_TABLE_PLASTICC_NATIVE -->
-*(Populated from the full run.)*
+From the full run (50/50/25/25 Optuna trials), on the future test fold:
+
+| Model | Macro-F1 | Balanced acc. | Accuracy | MCC | ROC-AUC | PR-AUC | Log loss | Weighted log loss |
+|---|---|---|---|---|---|---|---|---|
+| **XGBoost** | **0.549** | 0.667 | 0.668 | 0.553 | 0.933 | 0.725 | 0.972 | **0.960** |
+| LightGBM | 0.537 | 0.640 | 0.670 | 0.545 | 0.930 | 0.728 | 0.917 | 1.038 |
+| Balanced RF | 0.456 | 0.650 | 0.498 | 0.398 | 0.898 | 0.623 | 1.474 | 1.145 |
+| MLP | 0.414 | 0.534 | 0.562 | 0.407 | 0.885 | 0.544 | 2.958 | 3.779 |
+
+**XGBoost wins the 6-band native task** (macro-F1 0.549, weighted log loss 0.960),
+narrowly ahead of LightGBM (0.537) — the two gradient-boosted trees again lead
+clearly over Balanced RF (0.456) and the MLP (0.414). The absolute macro-F1 is
+modest because this is the full 14-class problem with a heavy rare-class tail;
+XGBoost is carried, with LightGBM as the reference, to the variant sweep.
 
 Figure `04_native_confusion_perclass` shows the winner's row-normalised confusion
 matrix and its per-class F1 against training-set size. Test F1 rises with
@@ -142,18 +154,40 @@ Figure `05_rq3_variants` is the headline plot: macro-F1 for 6-band versus g, r a
 native versus coarse. The variant metrics are in
 `figures/lc/plasticc/variant_comparison.csv`.
 
-<!-- RESULTS_TABLE_PLASTICC_VARIANTS -->
-*(Populated from the full run.)*
+Test macro-F1 for the two carried models across the four variants:
+
+| Task | Bands | Labels | XGBoost | LightGBM |
+|---|---|---|---|---|
+| 6-band native | *ugrizy* | 14-class | 0.549 | 0.537 |
+| g, r native | g, r | 14-class | 0.467 | 0.468 |
+| 6-band coarse | *ugrizy* | SN/AGN/VS | 1.000 | 1.000 |
+| **g, r coarse** | **g, r** | **SN/AGN/VS** | **0.889** | **0.889** |
 
 Reading the figure:
 
-- Dropping from **6 bands to g, r** costs macro-F1 — the size of that drop is the
-  quantitative feasibility answer for proposal §6.5: it is what is sacrificed by
-  matching ZTF's two bands.
-- The **coarse** task scores much higher than the native 14-class task (three
-  well-separated super-classes rather than fine subtypes), and it is the regime the
-  RQ3 transfer actually operates in.
-- The **g, r coarse** model is handed to the RQ3 sim-to-real study.
+- Dropping from **6 bands to g, r** costs macro-F1: ≈ 0.08 on the native task
+  (0.55 → 0.47) and ≈ 0.11 on the coarse task (1.00 → 0.89). That drop is the
+  quantitative feasibility answer for proposal §6.5 — what is sacrificed by matching
+  ZTF's two bands.
+- The **coarse** task scores far higher than the native 14-class task, and it is the
+  regime the RQ3 transfer actually operates in.
+- The **g, r coarse** model (macro-F1 0.889) is the artefact handed to the RQ3
+  sim-to-real study.
+
+**Important caveat on the coarse scores.** The pure temporal split interacts with
+astrophysics in a way that must be stated. AGN are *persistent* variables detected
+almost as soon as the survey begins, so their first-detection epochs cluster early
+and they land overwhelmingly in the training fold; supernovae are transient and
+spread across time, so they dominate the later folds. The coarse **test** fold is
+therefore 992 SN, 38 VS and only **2 AGN**. Combined with the fact that the VS class
+has `hostgal_photoz` identically zero (deterministically Galactic), the 6-band
+coarse problem becomes trivially separable on that particular test fold — which is
+why it reaches a *perfect* 1.000. That figure should be read as "simulated coarse
+classes are cleanly separable given all six bands", not as a robust generalisation
+estimate; the **g, r coarse** number (0.889), where the band restriction breaks the
+clean separation, is the more informative and honest result, and it is the one RQ3
+uses. We flag the AGN scarcity in the later folds as a limitation of the temporal
+split (§6).
 
 ### Findings
 
@@ -174,6 +208,12 @@ Reading the figure:
 - **Rare classes.** KN (100 objects) and Mira (30) have near-zero F1 for some
   algorithms; this is reported honestly, and the pure temporal split (no
   stratification) makes the later folds thinner still for these classes.
+- **AGN concentration under the temporal split.** Because AGN are persistent and
+  detected early, the temporal ordering pushes almost all of them into the training
+  fold, leaving only 2 AGN in the coarse test fold. The coarse-task scores — the
+  perfect 6-band figure especially — therefore rest on very few minority objects and
+  should be read with the g, r coarse result (0.889), not the 1.000, as the
+  representative number (see §5).
 - **Flux-based features.** PLAsTiCC provides calibrated flux, whereas the ZTF gold
   branch uses ALeRCE magnitude-domain features; the feature families are chosen to
   overlap conceptually, but they are not identical, which is a caveat for the RQ3
