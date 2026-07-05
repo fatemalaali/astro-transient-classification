@@ -1,0 +1,4 @@
+model,macro_f1,balanced_accuracy,accuracy,mcc,weighted_f1,roc_auc_macro,pr_auc_macro,log_loss
+ResNet-18,0.7508,0.829,0.9144,0.7161,0.9221,0.9693,0.8436,0.229
+EfficientNet-B0,0.7676,0.8186,0.9256,0.7368,0.9302,0.9668,0.8333,0.2153
+ALeRCE-CNN,0.6607,0.7253,0.8727,0.5858,0.8836,0.9168,0.7243,0.3923
