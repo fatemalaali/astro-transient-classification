@@ -1,0 +1,5 @@
+model,macro_f1,balanced_accuracy,accuracy,mcc,weighted_f1,roc_auc_macro,pr_auc_macro,log_loss,is_winner
+LightGBM,0.6701,0.6801,0.8175,0.6855,0.809,0.9558,0.7506,0.5274,False
+XGBoost,0.7049,0.7255,0.8226,0.7028,0.823,0.9552,0.7588,0.5493,True
+BalancedRF,0.5645,0.6877,0.6774,0.5371,0.71,0.9253,0.6712,1.148,False
+MLP,0.5523,0.5861,0.7107,0.4905,0.6932,0.8654,0.5795,3.5276,False
