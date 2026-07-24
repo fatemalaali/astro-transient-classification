@@ -277,3 +277,25 @@ Royal Astronomical Society*, 491(3), pp. 4277–4293.
 
 Sánchez-Sáez, P. et al. (2021) 'Alert classification for the ALeRCE broker system:
 the light curve classifier', *The Astronomical Journal*, 161(3), 141.
+
+
+---
+
+## Addendum — corrections identified by the fusion branch
+
+Added while building `fusion_ztf.ipynb`; see `docs/fusion_ztf.md` §2 and §3.
+
+**The winner was selected on the test fold.** `figures/lc/ztf/verdict.csv` assigns
+`is_winner` by test macro-F1, but the stated protocol selects on validation macro-F1 and
+leaves test sealed until final reporting. Both rules happen to choose LightGBM here, so the
+carried model is unaffected — but the reported test figure carries the optimism of a
+maximum-of-four selection. Note also that the LightGBM–XGBoost validation margin is 0.0003
+(0.9346 against 0.9343), so the choice between them is effectively arbitrary.
+
+**The saved model has memorised the validation fold.** Cell 47 saves the train+val refit,
+which is orthodox for a deployed model but means `models/lc/ztf/lightgbm/` scores macro-F1
+1.0000 on validation with mean maximum probability 0.9999. Anything fitted downstream on
+validation predictions from this artefact — a stacking meta-learner, a temperature — will
+degenerate. The card's `val_metrics` (0.9346) are *not* affected: they come from the
+separate train-only `vmodel`, and the fusion notebook reproduces that figure exactly. The
+fusion branch works around this by refitting on train only; see `docs/fusion_ztf.md` §3.

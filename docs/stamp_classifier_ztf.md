@@ -293,3 +293,41 @@ Networks', *Proceedings of the 36th International Conference on Machine Learning
 pp. 6105–6114.
 
 Transfer-learning data efficiency: arXiv:2502.18558; arXiv:2606.15705.
+
+
+---
+
+## Addendum — corrections identified by the fusion branch
+
+Added while building `fusion_ztf.ipynb`; see `docs/fusion_ztf.md` §2 and §3.
+
+**The winner was selected on the test fold, and the two rules disagree.** The notebook
+prints "Best ZTF stamp model by test macro-F1", but the stated protocol selects on
+validation macro-F1. On clean train-only validation scores ResNet-18 leads (0.780 against
+EfficientNet-B0's 0.757), while on test EfficientNet-B0 leads (0.7676 against 0.7508). The
+fusion branch carries EfficientNet-B0 for continuity and discloses the departure rather than
+re-selecting. Both Optuna studies also terminated early (`3/20` and `5/20` trials), so
+neither estimate is well converged.
+
+**The card's `val_metrics` are in-sample.** Cell 43 refits on `TRAINVAL_IDX` and then
+computes both `val_ev` and the temperature on `VAL_IDX` using that refit model. The card's
+validation macro-F1 of 0.8814 and temperature of 1.052 are therefore measured on data the
+model was trained on. Refit on train only, the same configuration scores **0.7424** on
+validation, and its honestly-fitted temperature is 1.667.
+
+This matters beyond bookkeeping: the light-curve card's validation figure *is* clean, so
+comparing the two cards directly is not like-for-like. Doing so suggests the image branch
+collapses from 0.8814 to 0.7676 across the temporal split. On honest models the image branch
+moves 0.7424 → 0.7414, a drift of −0.001 — the most stable component in the system, and less
+drift than the tabular branch's −0.028. The apparent collapse was an artefact.
+
+**§7's fusion-compatibility claim does not hold as written.** The `split_hash` values cannot
+be cross-checked against the light-curve cards: this notebook hashes with `index=False` over
+NPZ-ordered rows while the light-curve notebook uses `index=True` over merge-ordered rows, so
+the strings differ (`5ade91048434` against `65e15eed88f2`) despite identical underlying folds.
+The fusion notebook compares oid sets per split instead, and computes a canonical
+order-independent hash (`50591cf87b04`).
+
+**`model_scripted.pt` does not upsample in its graph.** Feeding it the native
+(N, 3, 63, 63) tensor returns near-chance output with no error; callers must bilinearly
+interpolate to 160 px first, as `preprocess.json` records.
