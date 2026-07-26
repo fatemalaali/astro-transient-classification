@@ -1,4 +1,4 @@
-comparison,delta_macro_f1,ci_lo,ci_hi,excludes_zero
-(c) Learned stack vs (a) LightGBM (LC) alone,0.00773140417909024,-0.013497884095730463,0.028506314157279476,False
-(c) Learned stack vs (b) Equal-weight average,0.005165308219447606,-0.015386502733933952,0.024833897007160776,False
-(b) Equal-weight average vs (a) LightGBM (LC) alone,0.0025660959596426336,-0.024944267600886964,0.026457466109639765,False
+comparison,delta_macro_f1,ci_lo,ci_hi,excludes_zero,mcnemar_p
+(c) Learned stack vs (a) lightgbm (LC) alone,0.007116570359121943,-0.0016543238630160662,0.01778200790349524,False,0.5078125
+(c) Learned stack vs (b) Equal-weight average,0.00798260387015326,-0.006696038515862568,0.026208557166326495,False,1.0
+(b) Equal-weight average vs (a) lightgbm (LC) alone,-0.0008660335110313166,-0.01841630129998915,0.01569991453544346,False,0.480682373046875

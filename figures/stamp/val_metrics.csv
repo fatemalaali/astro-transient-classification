@@ -1,0 +1,4 @@
+model,macro_f1
+ResNet-18,0.7617
+EfficientNet-B0,0.7632
+ALeRCE-CNN,0.6919

@@ -78,9 +78,13 @@ receives flips and translations only.
 ## 3. Training protocol
 
 **Temporal integrity.** `gold_splits.parquet` train/val/test is used as-is — the same
-objects and identical split boundaries as the light-curve branch. The split-membership hash
-stored in every model card cross-checks this. Early stopping monitors val macro-F1; the test
-fold is evaluated exactly once per final model. No k-fold is used.
+objects and identical split boundaries as the light-curve branch. Every model card stores
+the canonical **`split_id`** (`protocol.split_id`, the order-independent hash written into
+the gold `MANIFEST.json`), so the fusion notebook can assert every branch trained on the
+identical partition. Early stopping monitors val macro-F1; the test fold is evaluated
+exactly once per final model. No k-fold is used. The branch imports the shared `protocol.py`
+so its selection rule, forward-chaining OOF, temperature scaling and metrics are the same
+definitions the light-curve and fusion notebooks use.
 
 **Class imbalance.** Train counts: SN 4 643, VS 3 232, AGN 403. Inverse-frequency weighted
 cross-entropy is the default; `WeightedRandomSampler` is a tuning alternative.
@@ -124,34 +128,57 @@ seed (42). Trial counts: 20 / 20 / 25 (ResNet-18 / EfficientNet-B0 / ALeRCE-CNN)
 |---|---|---|---|---|---|---|---|---|---|
 | ResNet-18 | 5.95e-4 | 3.72e-4 | 4.0e-6 | 0.257 | 160 | 32 | 3 | False | — |
 | EfficientNet-B0 | 1.29e-3 | 9.77e-4 | 2.7e-5 | 0.260 | 160 | 32 | 3 | True | — |
-| ALeRCE-CNN | — | 4.44e-3 | 3.1e-4 | 0.285 | 63 | 32 | 1 | False | 48 |
+| ALeRCE-CNN | — | 2.75e-4 | 9.7e-5 | 0.325 | 63 | 32 | 3 | False | 32 |
 
 After tuning, each best configuration is refit on **train + val** for a fixed number of
 epochs equal to the early-stop epoch observed during tuning (val is now inside the training
-data, so there is no held-out fold for early stopping).
+data, so there is no held-out fold for early stopping) — this is the deployed model.
+
+### 4.1 Selection, out-of-fold predictions and calibration
+
+The branch obeys the shared protocol (`protocol.py`):
+
+- **The winner is selected on validation, never test** (`protocol.select_winner`). Each
+  architecture's honest train-only validation macro-F1 forms the selection frame
+  (`figures/stamp/val_metrics.csv`); the test fold is not consulted for the choice.
+- **The winner alone gets forward-chaining OOF predictions** (`protocol.forward_chain_oof`):
+  the training stamps are ordered by `firstmjd` and cut into five contiguous, time-ordered
+  blocks; for block *r+1* the CNN is **retrained from scratch** on blocks *0..r* for the
+  tuned number of epochs — with no early stopping and no monitoring of the block it will
+  predict — and used to predict block *r+1*. Block 0 is never predicted. This is why
+  `train_model` gained a fixed-epoch mode (`val_idx=None`): it must not peek at the block it
+  is scoring. The result is honest, never-in-sample probabilities for **6 622** training
+  objects.
+- **The temperature is fitted on those OOF predictions** (§5), not on validation.
 
 ---
 
 ## 5. Calibration
 
-Temperature scaling (Guo et al., 2017) is fitted on the validation set after refit: a single
-scalar *T* divides all logits before the softmax, estimated with LBFGS on the negative
+Temperature scaling (Guo et al., 2017) calibrates each branch before fusion: a single scalar
+*T* divides all logits before the softmax, estimated with LBFGS on the negative
 log-likelihood. Calibration is required because the late-fusion stage combines probabilities
 from the image and light-curve branches; uncalibrated CNN confidences would silently bias the
 fusion weights.
 
+**The winner's temperature is fitted on its forward-chaining OOF predictions**, not on
+validation — the honest, never-in-sample fold that fusion actually consumes. Non-winner
+architectures keep a diagnostic val-fitted temperature (used only for the reliability plots).
+
 **Fitted temperatures.**
 
-| Architecture | *T* |
-|---|---|
-| ResNet-18 | 0.720 |
-| EfficientNet-B0 | 1.052 |
-| ALeRCE-CNN | 0.977 |
+| Architecture | *T* | Fitted on |
+|---|---|---|
+| ResNet-18 | 0.849 | validation (diagnostic) |
+| **EfficientNet-B0** (winner) | **3.018** | **OOF** |
+| ALeRCE-CNN | 0.690 | validation (diagnostic) |
 
-*T* < 1 indicates over-confidence (ResNet-18); *T* ≈ 1 indicates the ALeRCE-CNN was already
-approximately calibrated; *T* slightly > 1 for EfficientNet-B0 indicates mild
-under-confidence on the val set. Reliability diagrams before and after are in
-`figures/stamp/10_reliability.{png,pdf}`.
+The winner's *T* = 3.018 is much larger than 1: on its honest OOF fold the fine-tuned
+backbone is strongly over-confident (its OOF macro-F1, 0.751, is well below its near-certain
+maximum probabilities), so the scalar has to soften the logits substantially. This is exactly
+the over-confidence temperature scaling exists to correct, and it is the value carried into
+fusion — an in-sample val fit would have understated it. Reliability diagrams before and
+after are in `figures/stamp/10_reliability.{png,pdf}`.
 
 ---
 
@@ -160,26 +187,40 @@ under-confidence on the val set. Reliability diagrams before and after are in
 Test fold: SN 1 513, AGN 61, VS 201 — AGN are the rarest class (3.5 % of test), so
 macro-F1 is the headline metric.
 
-### 6.1 Overall comparison
+### 6.1 Selection and overall comparison
+
+Selection is on the **validation** fold. The three architectures are close, and the two
+fine-tuned backbones are effectively tied:
+
+| Architecture | **Validation macro-F1 (selection)** | Test macro-F1 |
+|---|---|---|
+| **EfficientNet-B0** (carried) | **0.7632** | 0.7592 |
+| ResNet-18 | 0.7617 | 0.7607 |
+| ALeRCE-CNN | 0.6919 | 0.6778 |
+
+Full test battery (`figures/stamp/test_metrics.csv`), reported to grade the candidates, not
+to select among them:
 
 | Architecture | Macro-F1 | Balanced acc. | Accuracy | MCC | Weighted F1 | ROC-AUC (macro OvR) | PR-AUC (macro OvR) | Log-loss |
 |---|---|---|---|---|---|---|---|---|
-| **EfficientNet-B0** | **0.7676** | **0.8186** | **0.9256** | **0.7368** | 0.9302 | 0.9668 | 0.8333 | **0.2153** |
-| ResNet-18 | 0.7508 | 0.8290 | 0.9144 | 0.7161 | 0.9221 | **0.9693** | **0.8436** | 0.2290 |
-| ALeRCE-CNN | 0.6607 | 0.7253 | 0.8727 | 0.5858 | 0.8836 | 0.9168 | 0.7243 | 0.3923 |
+| **EfficientNet-B0** (winner) | 0.7592 | 0.8031 | 0.9189 | 0.7135 | 0.9227 | 0.9637 | 0.8315 | 0.2279 |
+| ResNet-18 | 0.7607 | 0.8698 | 0.9115 | 0.7187 | 0.9218 | 0.9715 | 0.8691 | 0.2315 |
+| ALeRCE-CNN | 0.6778 | 0.7333 | 0.8839 | 0.5921 | 0.8950 | 0.9284 | 0.7592 | 0.3253 |
 
-Full table: `figures/stamp/test_metrics.csv`. Comparison bar chart:
-`figures/stamp/07_comparison_bar.{png,pdf}`.
-
-**EfficientNet-B0 is the winner** by macro-F1 and MCC and proceeds to the late-fusion
-stage. ResNet-18 leads on ROC-AUC and PR-AUC (micro-averaged), which reflects its
-stronger discrimination for the majority SN class; EfficientNet-B0 compensates on the
-minority classes, where macro-F1 is more sensitive.
+**EfficientNet-B0 is the winner on validation macro-F1** (0.7632) and proceeds to the
+late-fusion stage with its OOF probabilities (6 622 objects, honest macro-F1 0.751) and
+OOF-fitted temperature. The margin over ResNet-18 is 0.0015 on validation — a near-tie, well
+within the ~0.02 run-to-run variance quoted below, so the two backbones should be read as
+equivalent and either would be a defensible carry. On the test fold the two even swap by a
+hair (ResNet-18 0.7607 against EfficientNet-B0 0.7592), which is exactly why selection must
+not be made on test. This is a genuine change from earlier drafts, where a truncated Optuna
+search (3/20 and 5/20 trials) reported a wider ResNet-18 lead on validation; the full
+20/20/25-trial search reported here collapses that gap.
 
 ### 6.2 Interpretation of the methodological question
 
 The two fine-tuned ImageNet backbones outperform the domain-specific ALeRCE-style CNN
-(Δ macro-F1 = +0.107 for EfficientNet-B0, +0.090 for ResNet-18). There are two plausible
+(Δ test macro-F1 = +0.081 for EfficientNet-B0, +0.083 for ResNet-18). There are two plausible
 contributing factors:
 
 1. **Data volume.** The original Carrasco-Davis et al. (2021) architecture was evaluated on
@@ -198,13 +239,14 @@ a direct comparison at equal dataset scale and with centre-cropping is left as f
 
 | Architecture | Parameters | Test macro-F1 | GPU latency (ms/stamp) |
 |---|---|---|---|
-| ResNet-18 | 11.18 M | 0.7508 | 0.160 |
-| EfficientNet-B0 | 4.01 M | 0.7676 | 0.225 |
-| ALeRCE-CNN | 0.33 M | 0.6607 | 0.261 |
+| ResNet-18 | 11.18 M | 0.7607 | 0.158 |
+| EfficientNet-B0 | 4.01 M | 0.7592 | 0.226 |
+| ALeRCE-CNN | 0.15 M | 0.6778 | 0.141 |
 
-EfficientNet-B0 achieves the best macro-F1 with fewer than half the parameters of ResNet-18.
-All three models are fast enough for real-time ZTF alert processing (< 1 ms per stamp on GPU
-at the batch sizes used here). Scatter plot: `figures/stamp/12_cost_accuracy.{png,pdf}`.
+EfficientNet-B0 (the carried winner) matches ResNet-18's accuracy with roughly a third of the
+parameters. All three models are fast enough for real-time ZTF alert processing (< 1 ms per
+stamp on GPU at the batch sizes used here). Scatter plot:
+`figures/stamp/12_cost_accuracy.{png,pdf}`.
 
 ### 6.4 Confusion matrices
 
@@ -227,7 +269,8 @@ limitations in the notebook.
 
 ## 7. Persistence contract
 
-Each model is saved under `models/stamp/<architecture>/`:
+Each model is saved under `models/stamp/<architecture>/`. The **winner** additionally carries
+the OOF branch contract (last four rows):
 
 | File | Contents |
 |---|---|
@@ -235,10 +278,14 @@ Each model is saved under `models/stamp/<architecture>/`:
 | `model_scripted.pt` | TorchScript export via `torch.jit.trace` |
 | `preprocess.json` | Normalisation scheme, input size, channel order, upsample method |
 | `best_params.json` | Best Optuna hyperparameters |
-| `model_card.json` | Class names, split hash, temperature, val + test metrics, latency, package versions |
+| `model_card.json` | Class names, canonical `split_id`, `base_provenance`, temperature, val + test metrics, latency, package versions; the winner adds `is_branch_winner`, `oof_provenance` and `oof_metrics` |
+| `oof_proba.npy` + `oof_oids.npy` | forward-chaining OOF probabilities and oids (fusion's fitting fold) |
+| `temperature.json` | scalar temperature, fitted on OOF |
+| `test_proba.npy` + `test_oids.npy` | deployed model's test probabilities and oids (what fusion scores on); `val_proba.npy` is a diagnostic |
 
-The `split_hash` in each card is cross-checked against the light-curve model cards to
-confirm fusion compatibility (same objects, same split).
+The canonical `split_id` in each card is compared against the light-curve model cards by
+`protocol.assert_same_split` in the fusion notebook, confirming fusion compatibility (same
+objects, same split) — a real check now, since the hash is order-independent.
 
 ---
 
@@ -297,37 +344,32 @@ Transfer-learning data efficiency: arXiv:2502.18558; arXiv:2606.15705.
 
 ---
 
-## Addendum — corrections identified by the fusion branch
+## Addendum — protocol alignment (root-level refactor)
 
-Added while building `fusion_ztf.ipynb`; see `docs/fusion_ztf.md` §2 and §3.
+Issues that earlier drafts carried, and that the fusion branch previously had to work
+around, are now **resolved at source** by the shared `protocol.py` (see §4.1).
 
-**The winner was selected on the test fold, and the two rules disagree.** The notebook
-prints "Best ZTF stamp model by test macro-F1", but the stated protocol selects on
-validation macro-F1. On clean train-only validation scores ResNet-18 leads (0.780 against
-EfficientNet-B0's 0.757), while on test EfficientNet-B0 leads (0.7676 against 0.7508). The
-fusion branch carries EfficientNet-B0 for continuity and discloses the departure rather than
-re-selecting. Both Optuna studies also terminated early (`3/20` and `5/20` trials), so
-neither estimate is well converged.
+**Selection is on validation** (`protocol.select_winner`), not test. On this full-search run
+EfficientNet-B0 wins the validation macro-F1 (0.7632 against ResNet-18's 0.7617) — a near-tie
+inside run-to-run variance — and is carried. The earlier draft's wider ResNet-18 lead
+(0.780 vs 0.757) came from a *truncated* Optuna search (3/20 and 5/20 completed trials); the
+full 20/20/25-trial search reported here narrows the gap and reverses the order. `grep` for a
+test-based `idxmax` selection returns nothing in this notebook.
 
-**The card's `val_metrics` are in-sample.** Cell 43 refits on `TRAINVAL_IDX` and then
-computes both `val_ev` and the temperature on `VAL_IDX` using that refit model. The card's
-validation macro-F1 of 0.8814 and temperature of 1.052 are therefore measured on data the
-model was trained on. Refit on train only, the same configuration scores **0.7424** on
-validation, and its honestly-fitted temperature is 1.667.
+**The winner's calibration is fitted on OOF, not on an in-sample validation fold.** Earlier
+the card's `val_metrics` and temperature were measured on the train+val model scored on val,
+i.e. on data the model had trained on. Now the deployed model is still the train+val refit,
+but the temperature (and the probabilities fusion consumes) come from the forward-chaining
+OOF (§4.1, §5). The winner's honest OOF macro-F1 is 0.751 — a genuinely held-out figure, not
+the inflated in-sample number an earlier draft reported.
 
-This matters beyond bookkeeping: the light-curve card's validation figure *is* clean, so
-comparing the two cards directly is not like-for-like. Doing so suggests the image branch
-collapses from 0.8814 to 0.7676 across the temporal split. On honest models the image branch
-moves 0.7424 → 0.7414, a drift of −0.001 — the most stable component in the system, and less
-drift than the tabular branch's −0.028. The apparent collapse was an artefact.
+**Fusion compatibility is a real check.** Every card stores the canonical, order-independent
+`split_id` (`76c4c40d0352`); `protocol.assert_same_split` compares it across branches. The
+old per-notebook `split_hash` strings differed cosmetically (`index=` and row order) and
+could not be compared directly — that whole class of false alarm is gone.
 
-**§7's fusion-compatibility claim does not hold as written.** The `split_hash` values cannot
-be cross-checked against the light-curve cards: this notebook hashes with `index=False` over
-NPZ-ordered rows while the light-curve notebook uses `index=True` over merge-ordered rows, so
-the strings differ (`5ade91048434` against `65e15eed88f2`) despite identical underlying folds.
-The fusion notebook compares oid sets per split instead, and computes a canonical
-order-independent hash (`50591cf87b04`).
-
-**`model_scripted.pt` does not upsample in its graph.** Feeding it the native
+**`model_scripted.pt` still does not upsample in its graph.** Feeding it the native
 (N, 3, 63, 63) tensor returns near-chance output with no error; callers must bilinearly
-interpolate to 160 px first, as `preprocess.json` records.
+interpolate to 160 px first, as `preprocess.json` records. (Fusion no longer touches the
+TorchScript export — it reads the saved probability arrays directly — so this trap now only
+matters to the alert system.)

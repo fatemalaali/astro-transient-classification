@@ -116,6 +116,13 @@ the same persistence contract (`model.joblib`, native booster, `best_params.json
 `model_card.json`) as the ZTF notebook, under
 `models/lc/plasticc/<task>/<algorithm>/`.
 
+**Selection is on validation** via the shared `protocol.select_winner` — the same
+one rule the ZTF and fusion notebooks use. The 6-band-native winner and the g,r-coarse
+RQ3 transfer model are both chosen by validation macro-F1 (`6band_native_val_metrics.csv`
+and the `val_macro_f1` column of `variant_comparison.csv`); the test fold grades the
+candidates but never selects among them. This branch feeds no fusion, so it emits no OOF
+contract — only the consistency of the selection rule matters here.
+
 ---
 
 ## 5. Results
@@ -126,20 +133,23 @@ The four tuned models are evaluated once on the future test fold; the metric tab
 (including weighted log loss) is written to
 `figures/lc/plasticc/6band_native_test_metrics.csv`.
 
-From the full run (50/50/25/25 Optuna trials), on the future test fold:
+From the full run (50/50/25/25 Optuna trials), the winner is chosen on **validation**
+macro-F1 (XGBoost 0.5634 against LightGBM 0.5595, Balanced RF 0.4640, MLP 0.4438) and
+then graded once on the future test fold:
 
 | Model | Macro-F1 | Balanced acc. | Accuracy | MCC | ROC-AUC | PR-AUC | Log loss | Weighted log loss |
 |---|---|---|---|---|---|---|---|---|
-| **XGBoost** | **0.549** | 0.667 | 0.668 | 0.553 | 0.933 | 0.725 | 0.972 | **0.960** |
-| LightGBM | 0.537 | 0.640 | 0.670 | 0.545 | 0.930 | 0.728 | 0.917 | 1.038 |
-| Balanced RF | 0.456 | 0.650 | 0.498 | 0.398 | 0.898 | 0.623 | 1.474 | 1.145 |
-| MLP | 0.414 | 0.534 | 0.562 | 0.407 | 0.885 | 0.544 | 2.958 | 3.779 |
+| **XGBoost** | **0.560** | 0.663 | 0.675 | 0.557 | 0.933 | 0.722 | 0.931 | **0.988** |
+| LightGBM | 0.543 | 0.637 | 0.694 | 0.573 | 0.936 | 0.736 | 1.101 | 1.397 |
+| Balanced RF | 0.453 | 0.661 | 0.524 | 0.426 | 0.901 | 0.629 | 1.447 | 1.129 |
+| MLP | 0.418 | 0.569 | 0.609 | 0.460 | 0.895 | 0.600 | 2.027 | 2.329 |
 
-**XGBoost wins the 6-band native task** (macro-F1 0.549, weighted log loss 0.960),
-narrowly ahead of LightGBM (0.537) — the two gradient-boosted trees again lead
-clearly over Balanced RF (0.456) and the MLP (0.414). The absolute macro-F1 is
-modest because this is the full 14-class problem with a heavy rare-class tail;
-XGBoost is carried, with LightGBM as the reference, to the variant sweep.
+**XGBoost wins the 6-band native task on validation** (0.5634 against LightGBM's
+0.5595) and also leads on the test fold (macro-F1 0.560, weighted log loss 0.988) —
+the two gradient-boosted trees again lead clearly over Balanced RF and the MLP. The
+absolute macro-F1 is modest because this is the full 14-class problem with a heavy
+rare-class tail; XGBoost is carried, with LightGBM as the reference, to the variant
+sweep.
 
 Figure `04_native_confusion_perclass` shows the winner's row-normalised confusion
 matrix and its per-class F1 against training-set size. Test F1 rises with
@@ -154,25 +164,27 @@ Figure `05_rq3_variants` is the headline plot: macro-F1 for 6-band versus g, r a
 native versus coarse. The variant metrics are in
 `figures/lc/plasticc/variant_comparison.csv`.
 
-Test macro-F1 for the two carried models across the four variants:
+Test macro-F1 for the two carried models across the four variants (validation macro-F1
+in parentheses, which is what selects the RQ3 model):
 
 | Task | Bands | Labels | XGBoost | LightGBM |
 |---|---|---|---|---|
-| 6-band native | *ugrizy* | 14-class | 0.549 | 0.537 |
-| g, r native | g, r | 14-class | 0.467 | 0.468 |
-| 6-band coarse | *ugrizy* | SN/AGN/VS | 1.000 | 1.000 |
-| **g, r coarse** | **g, r** | **SN/AGN/VS** | **0.889** | **0.889** |
+| 6-band native | *ugrizy* | 14-class | 0.560 | 0.543 |
+| g, r native | g, r | 14-class | 0.453 | 0.456 |
+| 6-band coarse | *ugrizy* | SN/AGN/VS | 0.987 | 1.000 |
+| **g, r coarse** | **g, r** | **SN/AGN/VS** | 0.875 (val 0.798) | **0.889 (val 0.819)** |
 
 Reading the figure:
 
-- Dropping from **6 bands to g, r** costs macro-F1: ≈ 0.08 on the native task
-  (0.55 → 0.47) and ≈ 0.11 on the coarse task (1.00 → 0.89). That drop is the
+- Dropping from **6 bands to g, r** costs macro-F1: ≈ 0.10 on the native task
+  (0.56 → 0.45) and ≈ 0.11 on the coarse task (1.00 → 0.89). That drop is the
   quantitative feasibility answer for proposal §6.5 — what is sacrificed by matching
   ZTF's two bands.
 - The **coarse** task scores far higher than the native 14-class task, and it is the
   regime the RQ3 transfer actually operates in.
-- The **g, r coarse** model (macro-F1 0.889) is the artefact handed to the RQ3
-  sim-to-real study.
+- The **g, r coarse RQ3 model is LightGBM**, selected on validation macro-F1 (0.819
+  against XGBoost's 0.798) and scoring test macro-F1 0.889 — the artefact handed to the
+  RQ3 sim-to-real study.
 
 **Important caveat on the coarse scores.** The pure temporal split interacts with
 astrophysics in a way that must be stated. AGN are *persistent* variables detected
@@ -182,11 +194,11 @@ spread across time, so they dominate the later folds. The coarse **test** fold i
 therefore 992 SN, 38 VS and only **2 AGN**. Combined with the fact that the VS class
 has `hostgal_photoz` identically zero (deterministically Galactic), the 6-band
 coarse problem becomes trivially separable on that particular test fold — which is
-why it reaches a *perfect* 1.000. That figure should be read as "simulated coarse
-classes are cleanly separable given all six bands", not as a robust generalisation
-estimate; the **g, r coarse** number (0.889), where the band restriction breaks the
-clean separation, is the more informative and honest result, and it is the one RQ3
-uses. We flag the AGN scarcity in the later folds as a limitation of the temporal
+why it reaches ≈ 0.99–1.00 (LightGBM a perfect 1.000, XGBoost 0.987). Those figures
+should be read as "simulated coarse classes are cleanly separable given all six
+bands", not as a robust generalisation estimate; the **g, r coarse** number (0.889),
+where the band restriction breaks the clean separation, is the more informative and
+honest result, and it is the one RQ3 uses. We flag the AGN scarcity in the later folds as a limitation of the temporal
 split (§6).
 
 ### Findings

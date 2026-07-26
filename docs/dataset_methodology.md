@@ -222,8 +222,17 @@ The surviving objects are assembled and written to `data/gold/`:
 | `gold_stamps.npz` | image tensor `(N, 3, 63, 63)` + oids + channel names |
 | `gold_labels.parquet` | oid → `coarse`, `fine`, `plasticc_class` |
 | `gold_metadata.parquet` | oid → ra, dec, redshift, source, ndet, firstmjd, lastmjd |
-| `gold_splits.parquet` | oid → `train` / `val` / `test` |
-| `MANIFEST.json` | config snapshot + all counts (shapes, class/split balance, sources) |
+| `gold_splits.parquet` | oid → `train` / `val` / `test`, `firstmjd`, and the canonical `split_id` |
+| `MANIFEST.json` | config snapshot + all counts (shapes, class/split balance, sources) + `split_id` |
+
+The **`split_id`** is a canonical, order-independent hash of the sorted
+`oid → split` assignment (identical to `protocol.split_id`), written into both
+`gold_splits.parquet` and `MANIFEST.json`. It is the single source of split
+identity: every downstream branch recomputes it and asserts it trained on this
+exact partition, and the fusion notebook uses it (via `protocol.assert_same_split`)
+to confirm all branches are fusable. It replaces the earlier per-notebook
+`pd.util.hash_pandas_object` hashes, which differed cosmetically (with `index=` and
+row order) and so could not be compared directly.
 
 ### The resulting classes (label taxonomy)
 

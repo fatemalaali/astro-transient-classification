@@ -1,5 +1,5 @@
 model,per_object_ms
-LightGBM,0.0097
-XGBoost,0.008
-BalancedRF,0.103
-MLP,0.01
+LightGBM,0.0108
+XGBoost,0.0082
+BalancedRF,0.0539
+MLP,0.0094

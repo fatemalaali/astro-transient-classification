@@ -163,8 +163,33 @@ Balanced RF and the MLP. The full search spaces are written out in the notebook
 
 Figure `06_optuna_history` shows the optimisation history per algorithm; the GBT
 studies converge within the first ~20–30 trials, so the budget is comfortable. Each
-tuned configuration is refit on train + val and saved. The best parameters are
-dumped to `best_params.json` beside each model.
+tuned configuration is refit on train + val (the deployed model) and saved, and a
+separate train-only model is scored on validation to give the honest selection
+metric. The best parameters are dumped to `best_params.json` beside each model.
+
+### 4.1 Selection, out-of-fold predictions and calibration
+
+The whole notebook obeys one protocol, defined once in the shared module
+`protocol.py` and imported here (and by the PLAsTiCC twin and the fusion notebook),
+so the four notebooks tell a single story rather than each re-implementing the
+rules:
+
+- **Selection is on validation, never test** (`protocol.select_winner`). The winner
+  is the argmax of the tuned-config **validation** macro-F1 frame
+  (`figures/lc/ztf/val_metrics.csv`); the test fold is not consulted for selection.
+- **The winner alone gets out-of-fold (OOF) predictions** by forward-chaining inside
+  the training fold (`protocol.forward_chain_oof`): the train objects are ordered by
+  `firstmjd` and cut into five contiguous, time-ordered blocks; for block *r+1* the
+  model is refit on blocks *0..r* at the tuned `n_estimators` (no early stopping
+  inside a block) and used to predict block *r+1*. Block 0 is never predicted. This
+  yields honest, never-in-sample probabilities for **6 622** training objects.
+- **The calibration temperature is fitted on those OOF predictions**
+  (`protocol.fit_temperature`), not on validation and not in-sample. For this
+  probabilistic branch the log-probabilities serve as logits.
+
+These artefacts are what the fusion notebook consumes — it fits its meta-learner on
+the OOF probabilities and scores the deployed model's test probabilities — so fusion
+no longer has to reconstruct a clean fitting fold by hand.
 
 ---
 
@@ -186,17 +211,21 @@ are:
 From the full run (60/60/30/30 Optuna trials), evaluated once on the future test
 fold (`figures/lc/ztf/test_metrics.csv`):
 
-| Model | Macro-F1 | Balanced acc. | Accuracy | MCC | ROC-AUC | PR-AUC | Log loss | Latency (ms/obj) |
-|---|---|---|---|---|---|---|---|---|
-| **LightGBM** | **0.946** | 0.944 | 0.981 | 0.928 | 0.994 | 0.977 | 0.101 | 0.010 |
-| XGBoost | 0.943 | 0.943 | 0.980 | 0.922 | 0.993 | 0.977 | 0.073 | 0.008 |
-| Balanced RF | 0.885 | 0.905 | 0.962 | 0.857 | 0.987 | 0.949 | 0.198 | 0.103 |
-| MLP | 0.858 | 0.916 | 0.941 | 0.798 | 0.977 | 0.927 | 0.244 | 0.010 |
+| Model | Macro-F1 | Balanced acc. | Accuracy | MCC | ROC-AUC | PR-AUC | Log loss |
+|---|---|---|---|---|---|---|---|
+| **LightGBM** | **0.9457** | 0.944 | 0.981 | 0.928 | 0.994 | 0.977 | 0.101 |
+| XGBoost | 0.9403 | 0.941 | 0.978 | 0.916 | 0.992 | 0.974 | 0.079 |
+| Balanced RF | 0.8942 | 0.913 | 0.965 | 0.865 | 0.988 | 0.954 | 0.191 |
+| MLP | 0.8659 | 0.906 | 0.937 | 0.781 | 0.970 | 0.928 | 0.483 |
 
-**LightGBM wins** on macro-F1 (0.946), with XGBoost a close second (0.943) — the
-two gradient-boosted trees are separated by far less than the gap down to Balanced
-RF (0.885), and the MLP trails at 0.858. LightGBM is the model carried to the
-late-fusion notebook.
+**LightGBM wins the selection on validation** (macro-F1 0.9346 against XGBoost's
+0.9320, Balanced RF 0.8517 and the MLP 0.8129; `val_metrics.csv`), and — read here
+only to grade it, not to select it — leads on the test fold as well (0.9457, with
+XGBoost a close 0.9403). The two gradient-boosted trees are separated by far less
+than the gap down to Balanced RF, and the MLP trails. LightGBM is the model carried
+to the late-fusion notebook, together with its forward-chaining OOF probabilities
+(macro-F1 0.960 on the 6 622 OOF objects — strong but not saturated, i.e. genuinely
+held-out) and its OOF-fitted temperature *T* = 1.67.
 
 ### Findings
 
@@ -225,17 +254,28 @@ The winning model proceeds to the late-fusion notebook, loaded purely from its
 ## 6. Model persistence contract
 
 Each saved model directory contains the artefacts the fusion notebook and the alert
-system consume, so the loading contract is fixed here:
+system consume, so the loading contract is fixed here. The **winner** additionally
+carries the OOF branch contract (the last four rows):
 
 - `model.joblib` — the fitted estimator (preprocessing pipeline + model) via joblib.
 - `model.txt` / `model.json` — the native LightGBM booster / XGBoost model, for
   dependency-light loading in the alert system.
 - `best_params.json` — the tuned hyper-parameters.
-- `model_card.json` — the feature list **in order**, class order, taxonomy, dataset
-  and split hash, train date, package versions, and the validation and test metrics.
+- `model_card.json` — the feature list **in order**, class order, taxonomy, dataset,
+  the canonical `split_id`, `base_provenance` (`train_val_refit`), and — for the
+  winner — `is_branch_winner`, the OOF-fitted `temperature`, `oof_provenance`
+  (`forward_chain_5block`) and `oof_metrics`, plus train date, package versions and
+  the validation and test metrics.
+- `oof_proba.npy` + `oof_oids.npy` — forward-chaining OOF probabilities and their
+  oids (the fusion meta-learner's fitting fold).
+- `temperature.json` — the scalar temperature, fitted on OOF.
+- `test_proba.npy` + `test_oids.npy` (and `val_proba.npy` for diagnostics) — the
+  deployed model's probabilities and oids (what fusion scores on).
 
-The fusion notebook loads models purely from these directories and never
-re-imports this notebook.
+The fusion notebook loads models purely from these directories, keyed off
+`is_branch_winner`, and never re-imports this notebook. The canonical `split_id` is
+the same order-independent hash written into the gold `MANIFEST.json`, so fusion can
+assert every branch trained on the identical partition.
 
 ---
 
@@ -281,21 +321,21 @@ the light curve classifier', *The Astronomical Journal*, 161(3), 141.
 
 ---
 
-## Addendum — corrections identified by the fusion branch
+## Addendum — protocol alignment (root-level refactor)
 
-Added while building `fusion_ztf.ipynb`; see `docs/fusion_ztf.md` §2 and §3.
+Two issues that earlier versions of this branch carried, and that the fusion branch had to
+work around, are now **resolved at source** by the shared `protocol.py` (see §4.1).
 
-**The winner was selected on the test fold.** `figures/lc/ztf/verdict.csv` assigns
-`is_winner` by test macro-F1, but the stated protocol selects on validation macro-F1 and
-leaves test sealed until final reporting. Both rules happen to choose LightGBM here, so the
-carried model is unaffected — but the reported test figure carries the optimism of a
-maximum-of-four selection. Note also that the LightGBM–XGBoost validation margin is 0.0003
-(0.9346 against 0.9343), so the choice between them is effectively arbitrary.
+**Selection is on validation.** The winner is chosen by `protocol.select_winner` on the
+tuned-config validation frame (`val_metrics.csv`); `verdict.csv` reports the test grade of
+that already-chosen winner and no longer drives the choice. `grep` for a test-based
+`idxmax` selection returns nothing in this notebook. (LightGBM wins on validation as it did
+on test, so the carried model is unchanged; the LightGBM–XGBoost validation margin, 0.9346
+against 0.9320, is small but the selection rule is now the correct one.)
 
-**The saved model has memorised the validation fold.** Cell 47 saves the train+val refit,
-which is orthodox for a deployed model but means `models/lc/ztf/lightgbm/` scores macro-F1
-1.0000 on validation with mean maximum probability 0.9999. Anything fitted downstream on
-validation predictions from this artefact — a stacking meta-learner, a temperature — will
-degenerate. The card's `val_metrics` (0.9346) are *not* affected: they come from the
-separate train-only `vmodel`, and the fusion notebook reproduces that figure exactly. The
-fusion branch works around this by refitting on train only; see `docs/fusion_ztf.md` §3.
+**Fusion no longer consumes memorised validation predictions.** The deployed model is still
+the train+val refit — orthodox for deployment — but the fusion meta-learner and the
+calibration temperature are fitted on the **forward-chaining OOF** probabilities emitted
+here (§4.1), which are genuinely held out (OOF macro-F1 0.960, not the 1.0000 a booster
+scores on its own training fold). The old leakage-audit / train-only-refit workaround in
+the fusion notebook is therefore gone; see `docs/fusion_ztf.md`.
