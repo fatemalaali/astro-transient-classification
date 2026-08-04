@@ -317,25 +317,3 @@ Royal Astronomical Society*, 491(3), pp. 4277–4293.
 
 Sánchez-Sáez, P. et al. (2021) 'Alert classification for the ALeRCE broker system:
 the light curve classifier', *The Astronomical Journal*, 161(3), 141.
-
-
----
-
-## Addendum — protocol alignment (root-level refactor)
-
-Two issues that earlier versions of this branch carried, and that the fusion branch had to
-work around, are now **resolved at source** by the shared `protocol.py` (see §4.1).
-
-**Selection is on validation.** The winner is chosen by `protocol.select_winner` on the
-tuned-config validation frame (`val_metrics.csv`); `verdict.csv` reports the test grade of
-that already-chosen winner and no longer drives the choice. `grep` for a test-based
-`idxmax` selection returns nothing in this notebook. (LightGBM wins on validation as it did
-on test, so the carried model is unchanged; the LightGBM–XGBoost validation margin, 0.9346
-against 0.9320, is small but the selection rule is now the correct one.)
-
-**Fusion no longer consumes memorised validation predictions.** The deployed model is still
-the train+val refit — orthodox for deployment — but the fusion meta-learner and the
-calibration temperature are fitted on the **forward-chaining OOF** probabilities emitted
-here (§4.1), which are genuinely held out (OOF macro-F1 0.960, not the 1.0000 a booster
-scores on its own training fold). The old leakage-audit / train-only-refit workaround in
-the fusion notebook is therefore gone; see `docs/fusion_ztf.md`.

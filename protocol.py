@@ -20,8 +20,7 @@ grades (once).*
 
 Design note: everything that a plain-`sklearn` environment cannot provide (torch,
 lightgbm, xgboost, imbalanced-learn) is imported **lazily inside the function that
-needs it**, so ``import protocol`` succeeds in every notebook environment
-(the CPU tabular env and the ``cv_gpu`` CUDA env alike) with no notebook
+needs it**, so ``import protocol`` succeeds in every notebook environment (gpu/cpu), with no notebook
 dependency of its own.
 """
 from __future__ import annotations
@@ -56,10 +55,8 @@ def split_id(split_df: pd.DataFrame) -> str:
 
     Order-independent and environment-independent by construction (it hashes a
     sorted ``oid\\tsplit`` text payload, not a pandas object hash), so two models
-    trained on the same partition always produce the *same* string — unlike the
-    old per-notebook ``pd.util.hash_pandas_object`` hashes, which differed
-    cosmetically with ``index=`` and row order. Used to assert every model was
-    trained on the same partition.
+    trained on the same partition always produce the *same* string.
+    Used to assert every model was trained on the same partition.
     """
     d = split_df[["oid", "split"]].copy()
     d["oid"] = d["oid"].astype(str)
@@ -75,8 +72,7 @@ def assert_same_split(cards: list[dict]) -> str:
     Each card must carry a ``split_id`` (the canonical hash of its full
     ``oid -> split`` map). Equal ``split_id`` is equivalent to identical OID sets
     per fold — that is exactly what the canonical hash encodes — so comparing the
-    canonical strings *is* the OID-set comparison, without the cosmetic
-    disagreements the old ``split_hash`` strings suffered from. Returns the shared
+    canonical strings *is* the OID-set comparison. Returns the shared
     id on success; raises ``AssertionError`` otherwise.
     """
     ids = [c.get("split_id") for c in cards]
@@ -113,6 +109,7 @@ def forward_chain_oof(fit_predict, train_idx, firstmjd, n_blocks: int = N_BLOCKS
     Sort ``train_idx`` by ``firstmjd``; cut into ``n_blocks`` contiguous,
     time-ordered blocks. For ``r`` in ``0 .. n_blocks-2``: train on blocks
     ``0..r`` and predict block ``r+1``. Block 0 is never predicted.
+    Basically, this is a time-ordered K-fold CV with K = n_blocks, but the folds are contiguous in time and the training set grows with each fold.
 
     Parameters
     ----------
@@ -131,10 +128,10 @@ def forward_chain_oof(fit_predict, train_idx, firstmjd, n_blocks: int = N_BLOCKS
 
     Returns
     -------
-    oof_proba : np.ndarray  ``(n_predicted, n_classes)``
+    oof_proba : np.ndarray  ``(n_predicted, n_classes)`` a combined out-of-fold prediction matrix
     oof_idx : np.ndarray    global positions the rows of ``oof_proba`` correspond to
         (blocks ``1 .. n_blocks-1``, concatenated in time order). Map these to
-        oids with ``oids[oof_idx]`` before saving.
+        oids with ``oids[oof_idx]`` before saving. A matching array of global positions so the caller can later map those positions back to the original data.
     """
     train_idx = np.asarray(train_idx)
     firstmjd = np.asarray(firstmjd)
@@ -144,6 +141,7 @@ def forward_chain_oof(fit_predict, train_idx, firstmjd, n_blocks: int = N_BLOCKS
 
     proba_parts, idx_parts = [], []
     for r in range(n_blocks - 1):
+        # Train on blocks 0..r, predict block r+1. Block 0 is never predicted.
         tr = np.concatenate(blocks[: r + 1])
         pr = blocks[r + 1]
         if len(pr) == 0:
@@ -151,6 +149,7 @@ def forward_chain_oof(fit_predict, train_idx, firstmjd, n_blocks: int = N_BLOCKS
         proba = np.asarray(fit_predict(tr, pr), dtype=np.float64)
         assert proba.shape[0] == len(pr), (
             f"fit_predict returned {proba.shape[0]} rows for a block of {len(pr)}")
+        # Append the predicted probabilities and the corresponding indices for later concatenation.
         proba_parts.append(proba)
         idx_parts.append(pr)
 
@@ -160,14 +159,17 @@ def forward_chain_oof(fit_predict, train_idx, firstmjd, n_blocks: int = N_BLOCKS
 
 
 # --------------------------------------------------------------------------- #
-# probability helpers + temperature scaling
+# probability helpers + temperature scaling (Calibration Pipeline)
 # --------------------------------------------------------------------------- #
 _LOG_EPS = 1e-12
 
 
 def as_logits(proba) -> np.ndarray:
     """Log-probabilities, usable as logits for a probabilistic classifier.
-
+       Puts values into log-space, which is often easier for calibration and optimization.
+       Especially useful when working with models that produce either probabilities or logits, as it allows for consistent handling of either of the outputs.
+       Example input: Input probabilities OR Logits: [0.80, 0.15, 0.05]
+       Example output: Log-probabilities: [log(0.80), log(0.15), log(0.05)] = [-0.22314355, -1.89711998, -2.99573227]
     Temperature scaling on ``log p`` is identical to scaling on the raw logits,
     because softmax is invariant to per-row additive constants — so a single
     :func:`fit_temperature` serves both the tabular (probabilistic) and CNN
@@ -177,7 +179,11 @@ def as_logits(proba) -> np.ndarray:
 
 
 def softmax(z, T: float = 1.0) -> np.ndarray:
-    """Numerically-stable softmax with temperature ``T`` (row-wise)."""
+    """
+    Numerically-stable softmax with temperature ``T`` (row-wise).
+    Return a set of class scores by turning them into probabilities that are temperature-scaled. 
+    The temperature parameter controls the "confidence" of the predictions, with higher values leading to more uniform probabilities and lower values leading to more confident predictions. 
+    """
     z = np.asarray(z, dtype=np.float64) / T
     z = z - z.max(1, keepdims=True)
     e = np.exp(z)
@@ -191,14 +197,19 @@ class TemperatureScaler:
     the OOF negative log-likelihood over a single ``T`` and :meth:`transform`
     returns calibrated probabilities.
     """
-
+    # Initialize with the chosen temperature scaler, defaulting to 1.0 (means no scaling).
     def __init__(self, T: float = 1.0):
         self.T = float(T)
-
+    
+    # Fit the temperature scaler to the logits and true labels.
+    # To find the optimal temperature that minimizes the negative log-likelihood.
     def fit(self, logits, y):
         self.T = fit_temperature(logits, y)
         return self
-
+    
+    # Transform the logits using the fitted temperature and return calibrated probabilities.
+    # This applies the softmax function to the logits divided by the temperature.
+    # This means the model’s raw confidence values are adjusted so that the predicted probabilities better match the observed frequencies
     def transform(self, logits) -> np.ndarray:
         return softmax(logits, T=self.T)
 
@@ -238,7 +249,12 @@ def macro_f1(y, proba) -> float:
 
 
 def expected_calibration_error(proba, y, n_bins: int = 15) -> float:
-    """Expected calibration error over ``n_bins`` equal-width confidence bins."""
+    """
+    Expected calibration error over ``n_bins`` equal-width confidence bins.
+    To understand whether the model is over-confident or under-confident in its predictions, we can use the expected calibration error (ECE). 
+    ECE measures the difference between predicted probabilities and actual outcomes. 
+    A lower ECE indicates better calibration of the model's predicted probabilities (i.e. the model's predicted probabilities are closer to the true probabilities).
+    """
     proba = np.asarray(proba)
     y = np.asarray(y)
     conf = proba.max(1)
@@ -259,6 +275,9 @@ def bootstrap_ci(metric_fn, y, proba, n: int = 10_000, seed: int = SEED,
 
     Returns ``(point, lo, hi)``. ``metric_fn`` takes ``(y, proba)`` and returns a
     scalar (e.g. :func:`macro_f1`).
+    
+    Essentially what it does it, it resamples the data with replacement multiple times (n times), computes the metric for each resampled dataset, and then calculates the confidence interval based on the distribution of the computed metrics.
+    This is helpful because a single performance score can be noisy, and a bootstrap interval gives a more informative view of how stable that score is under sampling variation.
     """
     y = np.asarray(y)
     proba = np.asarray(proba)

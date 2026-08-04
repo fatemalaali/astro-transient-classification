@@ -340,36 +340,3 @@ Networks', *Proceedings of the 36th International Conference on Machine Learning
 pp. 6105–6114.
 
 Transfer-learning data efficiency: arXiv:2502.18558; arXiv:2606.15705.
-
-
----
-
-## Addendum — protocol alignment (root-level refactor)
-
-Issues that earlier drafts carried, and that the fusion branch previously had to work
-around, are now **resolved at source** by the shared `protocol.py` (see §4.1).
-
-**Selection is on validation** (`protocol.select_winner`), not test. On this full-search run
-EfficientNet-B0 wins the validation macro-F1 (0.7632 against ResNet-18's 0.7617) — a near-tie
-inside run-to-run variance — and is carried. The earlier draft's wider ResNet-18 lead
-(0.780 vs 0.757) came from a *truncated* Optuna search (3/20 and 5/20 completed trials); the
-full 20/20/25-trial search reported here narrows the gap and reverses the order. `grep` for a
-test-based `idxmax` selection returns nothing in this notebook.
-
-**The winner's calibration is fitted on OOF, not on an in-sample validation fold.** Earlier
-the card's `val_metrics` and temperature were measured on the train+val model scored on val,
-i.e. on data the model had trained on. Now the deployed model is still the train+val refit,
-but the temperature (and the probabilities fusion consumes) come from the forward-chaining
-OOF (§4.1, §5). The winner's honest OOF macro-F1 is 0.751 — a genuinely held-out figure, not
-the inflated in-sample number an earlier draft reported.
-
-**Fusion compatibility is a real check.** Every card stores the canonical, order-independent
-`split_id` (`76c4c40d0352`); `protocol.assert_same_split` compares it across branches. The
-old per-notebook `split_hash` strings differed cosmetically (`index=` and row order) and
-could not be compared directly — that whole class of false alarm is gone.
-
-**`model_scripted.pt` still does not upsample in its graph.** Feeding it the native
-(N, 3, 63, 63) tensor returns near-chance output with no error; callers must bilinearly
-interpolate to 160 px first, as `preprocess.json` records. (Fusion no longer touches the
-TorchScript export — it reads the saved probability arrays directly — so this trap now only
-matters to the alert system.)
