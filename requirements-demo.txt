@@ -1,0 +1,34 @@
+# Demo system requirements — see docs/demo-plan.md
+#
+# Install with:
+#   python -m pip install -r requirements-demo.txt
+#
+# The demo degrades gracefully when optional dependencies are absent: every
+# heavy import is lazy and behind a capability check, so the API and dashboard
+# run with stubs (DEMO_USE_STUBS=1) on a bare install.
+
+# --- core (required) ---
+numpy>=1.26
+pandas>=2.0
+pyarrow>=14.0
+requests>=2.31
+python-dotenv>=1.0
+tzdata; platform_system == "Windows"   # zoneinfo has no system tz database on Windows
+
+# --- API + dashboard (required to serve) ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# --- inference (required for real predictions; stubs work without them) ---
+lightgbm==4.6.0          # pinned: model.txt was written by 4.6.0
+torch>=2.8               # TorchScript only — no timm/torchvision needed at serve time
+Pillow>=10.0             # stamp PNG rendering
+
+# --- Fink Livestream, primary ingestion path ---
+fink-client==11.0        # pinned: demo/adapters/fink_kafka.py touches AlertConsumer internals
+confluent-kafka>=2.4     # pulled in by fink-client; listed so the pin is visible
+fastavro>=1.9.4,<2.0.0
+astropy>=6.0             # FITS decode for Kafka cutouts
+
+# --- fallback ingestion ---
+alerce>=2.3.0            # ALeRCE feature resolution (features/stamps ONLY — never probabilities)

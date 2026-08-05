@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "TEMPLATE ONLY — this file is not used at runtime.",
+    "",
+    "Generate the real config/replay_manifest.json with:",
+    "    python scripts/record_replay_manifest.py --limit 60",
+    "and commit it, so `python -m demo.run_consumer --mode replay` replays the",
+    "identical alert window from any checkout.",
+    "",
+    "A real manifest is deliberately NOT shipped: offsets are only meaningful",
+    "against live Fink topics, and a stale or invented one would silently start",
+    "the replay somewhere other than intended."
+  ],
+  "created_utc": "2026-08-05T00:00:00.000Z",
+  "total_limit": 60,
+  "offsets": [
+    { "topic": "fink_sn_candidates_ztf", "partition": 4, "offset": 8812 },
+    { "topic": "fink_early_sn_candidates_ztf", "partition": 0, "offset": 214 },
+    { "topic": "fink_blazar_ztf", "partition": 2, "offset": 37 }
+  ]
+}

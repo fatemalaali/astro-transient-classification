@@ -1,6 +1,12 @@
 .env
 data/
 slides/
+__pycache__/
+*.pyc
+# Local demo configuration. config/demo.env.example IS tracked;
+# config/replay_manifest.json is tracked deliberately, since committing the
+# pinned offsets is what makes the replay demo reproducible from a checkout.
+config/demo.env
 plasticc_data/
 *.pptx
 docs/figs
@@ -9,3 +15,6 @@ models/
 REFACTOR_PLAN.md
 docs/methodology_primer.md
 docs/methodology_primer.pdf
+docs/demo-plan.md
+run_demo.ps1
+run_demo.sh

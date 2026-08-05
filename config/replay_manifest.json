@@ -1,0 +1,301 @@
+{
+  "created_utc": "2026-08-05T17:20:26.648Z",
+  "total_limit": 60,
+  "offsets": [
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 0,
+      "offset": 1814
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 1,
+      "offset": 24245
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 2,
+      "offset": 22929
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 5,
+      "offset": 28083
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 7,
+      "offset": 254
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_blazar_ztf",
+      "partition": 9,
+      "offset": 7009
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 0,
+      "offset": 59
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 1,
+      "offset": 837
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 2,
+      "offset": 982
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 4,
+      "offset": 152
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 5,
+      "offset": 578
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 7,
+      "offset": 5
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_early_sn_candidates_ztf",
+      "partition": 9,
+      "offset": 201
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 0,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 1,
+      "offset": 154
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 2,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 4,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 5,
+      "offset": 384
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 7,
+      "offset": 9
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_magnetic_cvs_ztf",
+      "partition": 9,
+      "offset": 87
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 0,
+      "offset": 2649
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 1,
+      "offset": 28567
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 2,
+      "offset": 41463
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 4,
+      "offset": 12318
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 5,
+      "offset": 27814
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 7,
+      "offset": 259
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_sn_candidates_ztf",
+      "partition": 9,
+      "offset": 13878
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 0,
+      "offset": 203
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 1,
+      "offset": 3004
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 2,
+      "offset": 3155
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 4,
+      "offset": 841
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 5,
+      "offset": 3030
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 7,
+      "offset": 14
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_tns_match_ztf",
+      "partition": 9,
+      "offset": 989
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 0,
+      "offset": 82067
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 1,
+      "offset": 561668
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 2,
+      "offset": 1069418
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 3,
+      "offset": 0
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 4,
+      "offset": 0
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 5,
+      "offset": 679061
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 6,
+      "offset": 0
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 7,
+      "offset": 8191
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 8,
+      "offset": 0
+    },
+    {
+      "topic": "fink_vra_ztf",
+      "partition": 9,
+      "offset": 305953
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-time transient classification — demo</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<!--
+  Every asset is served from this host. No CDN, no external fonts, no remote
+  tiles: the dashboard must work with the network cable pulled (demo-day
+  insurance, docs/demo-plan.md section 9, Phase 6).
+-->
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-title">Real-time multimodal transient classification</span>
+    <span class="brand-sub">SN / AGN / VS &middot; late fusion of light-curve and image branches</span>
+  </div>
+
+  <nav class="tabs">
+    <a href="#/" data-route="stream" class="tab">Alert stream</a>
+    <a href="#/methodology" data-route="methodology" class="tab">Methodology</a>
+  </nav>
+
+  <div id="live-indicator" class="live-indicator">
+    <span class="badge badge-unknown" id="live-badge">connecting…</span>
+    <div class="live-detail" id="live-detail"></div>
+  </div>
+</header>
+
+<div id="provenance-strip" class="provenance-strip">
+  <strong>Provenance:</strong>
+  labels come from spectroscopic and catalogue sources only (TNS, BTS, Chen+2020,
+  Milliquas, SDSS&nbsp;DR16Q). Brokers supply alert packets, cutouts and
+  light-curve features &mdash; <em>never</em> labels, and never model input derived
+  from their own classifications.
+  <button class="link-btn" id="provenance-more">details</button>
+</div>
+
+<main id="view" class="view"><div class="loading">Loading…</div></main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="modal-title">Details</h3>
+      <button class="close-btn" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<footer class="footer">
+  <span id="footer-config"></span>
+</footer>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/plot.js"></script>
+<script src="/static/js/stream.js"></script>
+<script src="/static/js/object.js"></script>
+<script src="/static/js/method.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
