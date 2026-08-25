@@ -32,3 +32,6 @@ astropy>=6.0             # FITS decode for Kafka cutouts
 
 # --- fallback ingestion ---
 alerce>=2.3.0            # ALeRCE feature resolution (features/stamps ONLY — never probabilities)
+
+# --- tests (optional; needed for `python -m pytest tests`) ---
+pytest>=8.0
